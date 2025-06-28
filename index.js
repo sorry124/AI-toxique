@@ -1,94 +1,57 @@
-import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getMemory, saveMemory } from './db.js';
+import makeWASocket, { useMultiFileAuthState } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
+import { handlerMessage } from './that.js'; // ta fonction de gestion des messages
 
-const ownerNumber = process.env.OWNER_NUMBER;
-const openaiKey = process.env.OPENAI_API_KEY;
-const geminiKey = process.env.GEMINI_API_KEY;
+console.log('🚀 Démarrage du bot...');
 
-let mode = true; // IA activée par défaut
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('./auth');
 
-// Active ou désactive l’IA selon commande
-export function toggleAI(command, sender) {
-  if (sender !== ownerNumber) return "⛔ Tu n'as pas le droit de faire ça.";
-  if (command === 'on') {
-    mode = true;
-    return "🤖 IA activée.";
-  } else if (command === 'off') {
-    mode = false;
-    return "🛑 IA désactivée.";
-  }
-  return "❓ Utilise !ai on / !ai off";
-}
+  const sock = makeWASocket({
+    printQRInTerminal: true,
+    auth: state,
+  });
 
-export function isAIEnabled() {
-  return mode;
-}
-
-// Création client OpenAI / Gemini
-const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
-const genAI = geminiKey ? new GoogleGenerativeAI(geminiKey) : null;
-
-// Fonction principale IA : interroger le modèle
-export async function askAI(msg, sender) {
-  if (!mode) return;
-
-  const memory = await getMemory(sender);
-  const messages = memory || [];
-
-  messages.push({ role: 'user', content: msg });
-
-  let answer;
-
-  try {
-    if (openai) {
-      const chat = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: messages,
-      });
-      answer = chat.choices[0].message.content;
-    } else if (genAI) {
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-      const result = await model.generateContent(msg);
-      answer = result.response.text();
-    } else {
-      answer = "❌ Aucune clé API disponible pour répondre.";
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
+    console.log('Connection update:', connection);
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== 401;
+      console.log('Connexion fermée, reconnect ?', shouldReconnect);
+      if (shouldReconnect) {
+        startBot();
+      } else {
+        console.log('Session expirée, reconnect manuellement');
+      }
+    } else if (connection === 'open') {
+      console.log('Bot connecté ✅');
     }
-  } catch (err) {
-    answer = "⚠️ Erreur IA.";
-    console.error(err);
-  }
+  });
 
-  messages.push({ role: 'assistant', content: answer });
-  await saveMemory(sender, messages);
+  sock.ev.on('creds.update', saveCreds);
 
-  return answer;
+  sock.ev.on('messages.upsert', async (m) => {
+    console.log('📩 Event messages.upsert reçu:', JSON.stringify(m, null, 2));
+
+    if (m.type === 'notify') {
+      for (const msg of m.messages) {
+        if (msg.key.fromMe) continue; // Ignore messages envoyés par le bot
+        if (!msg.message) continue; // Ignore si pas de message
+
+        const chatId = msg.key.remoteJid;
+        const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+
+        console.log(`Message reçu de ${chatId} : ${text}`);
+
+        // Appelle ta fonction de gestion
+        try {
+          await handlerMessage(msg, sock);
+        } catch (err) {
+          console.error('Erreur dans handlerMessage:', err);
+        }
+      }
+    }
+  });
 }
 
-// Handler appelé à chaque message reçu
-export async function handlerMessage(message, sock) {
-  const sender = message.key.remoteJid;
-  const msg = message.message?.conversation || message.message?.extendedTextMessage?.text;
-
-  if (!msg) return;
-
-  const isMentioned = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.includes(sock.user.id);
-  const isReplyToBot = message.message?.extendedTextMessage?.contextInfo?.participant === sock.user.id;
-
-  // Répond uniquement si IA activée et mentionné ou réponse au bot
-  if ((isMentioned || isReplyToBot) && mode) {
-    const response = await askAI(msg, sender);
-    if (response) {
-      await sock.sendMessage(sender, { text: response });
-    }
-  }
-
-  // Commande !ai on/off
-  if (msg.startsWith('!ai')) {
-    const command = msg.split(' ')[1];
-    const reply = toggleAI(command, sender);
-    if (reply) {
-      await sock.sendMessage(sender, { text: reply });
-    }
-  }
-}
+startBot();
