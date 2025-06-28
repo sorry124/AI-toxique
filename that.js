@@ -69,3 +69,31 @@ export async function askAI(msg, sender) {
 
   return answer;
 }
+import makeWASocket from '@whiskeysockets/baileys'; // si besoin, sinon supprime cette ligne si déjà importé dans index.js
+
+export async function handlerMessage(message, sock) {
+  const sender = message.key.remoteJid;
+  const msg = message.message?.conversation || message.message?.extendedTextMessage?.text;
+
+  if (!msg) return;
+
+  const isMentioned = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.includes(sock.user.id);
+  const isReplyToBot = message.message?.extendedTextMessage?.contextInfo?.participant === sock.user.id;
+
+  // IA activée seulement si mention ou réponse
+  if ((isMentioned || isReplyToBot)) {
+    const response = await askAI(msg, sender);
+    if (response) {
+      await sock.sendMessage(sender, { text: response });
+    }
+  }
+
+  // 🔁 Commande !ai
+  if (msg.startsWith('!ai')) {
+    const command = msg.split(' ')[1];
+    const reply = toggleAI(command, sender);
+    if (reply) {
+      await sock.sendMessage(sender, { text: reply });
+    }
+  }
+}
