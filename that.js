@@ -1,57 +1,71 @@
-// that.js
-import config from './config.js';
-import { saveMemory, getMemory } from './db.js';
-import { Configuration, OpenAIApi } from 'openai';
-import axios from 'axios';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getMemory, saveMemory } from './db.js';
 
-const openaiConfig = new Configuration({
-  apiKey: config.OPENAI_API_KEY,
-});
+const ownerNumber = process.env.OWNER_NUMBER;
+const openaiKey = process.env.OPENAI_API_KEY;
+const geminiKey = process.env.GEMINI_API_KEY;
 
-const openai = new OpenAIApi(openaiConfig);
+let mode = true; // IA active par défaut
 
-async function callOpenAI(messages) {
-  try {
-    const response = await openai.createChatCompletion({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.7,
-    });
-    return response.data.choices[0].message.content;
-  } catch (error) {
-    console.error('OpenAI error:', error);
-    return 'Désolé, j’ai un problème avec l\'IA.';
+// 🔁 IA Toggle
+export function toggleAI(command, sender) {
+  if (sender !== ownerNumber) return "⛔ Tu n'as pas le droit de faire ça.";
+  if (command === 'on') {
+    mode = true;
+    return "🤖 IA activée.";
+  } else if (command === 'off') {
+    mode = false;
+    return "🛑 IA désactivée.";
   }
+  return "❓ Utilise !ai on / !ai off";
 }
 
-export async function generateReply(chatId, prompt) {
-  // Récupère la mémoire conversationnelle
-  const history = await getMemory(chatId, 30);
-  
-  // Prépare le contexte toxique style pote Discord
-  const systemMessage = {
-    role: 'system',
-    content: "Tu es un pote toxique sur Discord, drôle et sarcastique, mais toujours amical."
-  };
-
-  // Assemble les messages
-  const messages = [systemMessage, ...history, { role: 'user', content: prompt }];
-
-  // Sauvegarde la nouvelle requête utilisateur
-  await saveMemory(chatId, 'user', prompt);
-
-  // Appelle l'API OpenAI
-  const reply = await callOpenAI(messages);
-
-  // Sauvegarde la réponse bot
-  await saveMemory(chatId, 'assistant', reply);
-
-  return reply;
+export function isAIEnabled() {
+  return mode;
 }
 
-export function getRandomSticker() {
-  const stickers = config.STICKER_URLS;
-  if (stickers.length === 0) return null;
-  const index = Math.floor(Math.random() * stickers.length);
-  return stickers[index];
+// 🧠 OpenAI (v4)
+const openai = openaiKey
+  ? new OpenAI({ apiKey: openaiKey })
+  : null;
+
+// 🧠 Gemini
+const genAI = geminiKey
+  ? new GoogleGenerativeAI(geminiKey)
+  : null;
+
+export async function askAI(msg, sender) {
+  if (!mode) return;
+
+  const memory = await getMemory(sender);
+  const messages = memory || [];
+
+  messages.push({ role: 'user', content: msg });
+
+  let answer;
+
+  try {
+    if (openai) {
+      const chat = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: messages,
+      });
+      answer = chat.choices[0].message.content;
+    } else if (genAI) {
+      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const result = await model.generateContent(msg);
+      answer = result.response.text();
+    } else {
+      answer = "❌ Aucune clé API disponible pour répondre.";
+    }
+  } catch (err) {
+    answer = "⚠️ Erreur lors de la réponse IA.";
+    console.error(err);
+  }
+
+  messages.push({ role: 'assistant', content: answer });
+  await saveMemory(sender, messages);
+
+  return answer;
 }
