@@ -1,65 +1,94 @@
-import makeWASocket, { DisconnectReason } from '@whiskeysockets/baileys';
-import { Boom } from '@hapi/boom';
-import dotenv from 'dotenv';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getMemory, saveMemory } from './db.js';
 
-dotenv.config();
+const ownerNumber = process.env.OWNER_NUMBER;
+const openaiKey = process.env.OPENAI_API_KEY;
+const geminiKey = process.env.GEMINI_API_KEY;
 
-import { handlerMessage } from './ta_fonction_ia.js';
+let mode = true; // IA activée par défaut
 
-console.log("🚀 Bot démarre...");
-
-setInterval(() => {
-  console.log("🟢 Bot toujours vivant...");
-}, 10000);
-
-async function startBot() {
-  if (!process.env.SESSION_ID) {
-    console.error("❌ SESSION_ID manquante dans .env");
-    process.exit(1);
+// Active ou désactive l’IA selon commande
+export function toggleAI(command, sender) {
+  if (sender !== ownerNumber) return "⛔ Tu n'as pas le droit de faire ça.";
+  if (command === 'on') {
+    mode = true;
+    return "🤖 IA activée.";
+  } else if (command === 'off') {
+    mode = false;
+    return "🛑 IA désactivée.";
   }
-
-  let auth;
-  try {
-    auth = JSON.parse(process.env.SESSION_ID);
-  } catch (e) {
-    console.error("❌ Erreur parsing SESSION_ID :", e);
-    process.exit(1);
-  }
-
-  const sock = makeWASocket({
-    auth,
-    printQRInTerminal: false,
-  });
-
-  sock.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update;
-    if (connection === 'close') {
-      const reason = new Boom(lastDisconnect?.error).output.statusCode;
-      console.log('❌ Connexion fermée, raison:', reason);
-      if (reason !== DisconnectReason.loggedOut) {
-        console.log('🔄 Reconnexion en cours...');
-        startBot();
-      } else {
-        console.log('🛑 Déconnecté, session invalide.');
-      }
-    } else if (connection === 'open') {
-      console.log('✅ Bot connecté !');
-    }
-  });
-
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
-    for (const msg of messages) {
-      if (!msg.message) continue;
-      if (msg.key.fromMe) continue;
-
-      try {
-        await handlerMessage(msg, sock);
-      } catch (e) {
-        console.error('⚠️ Erreur handlerMessage:', e);
-      }
-    }
-  });
+  return "❓ Utilise !ai on / !ai off";
 }
 
-startBot();
+export function isAIEnabled() {
+  return mode;
+}
+
+// Création client OpenAI / Gemini
+const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null;
+const genAI = geminiKey ? new GoogleGenerativeAI(geminiKey) : null;
+
+// Fonction principale IA : interroger le modèle
+export async function askAI(msg, sender) {
+  if (!mode) return;
+
+  const memory = await getMemory(sender);
+  const messages = memory || [];
+
+  messages.push({ role: 'user', content: msg });
+
+  let answer;
+
+  try {
+    if (openai) {
+      const chat = await openai.chat.completions.create({
+        model: 'gpt-4',
+        messages: messages,
+      });
+      answer = chat.choices[0].message.content;
+    } else if (genAI) {
+      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const result = await model.generateContent(msg);
+      answer = result.response.text();
+    } else {
+      answer = "❌ Aucune clé API disponible pour répondre.";
+    }
+  } catch (err) {
+    answer = "⚠️ Erreur IA.";
+    console.error(err);
+  }
+
+  messages.push({ role: 'assistant', content: answer });
+  await saveMemory(sender, messages);
+
+  return answer;
+}
+
+// Handler appelé à chaque message reçu
+export async function handlerMessage(message, sock) {
+  const sender = message.key.remoteJid;
+  const msg = message.message?.conversation || message.message?.extendedTextMessage?.text;
+
+  if (!msg) return;
+
+  const isMentioned = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.includes(sock.user.id);
+  const isReplyToBot = message.message?.extendedTextMessage?.contextInfo?.participant === sock.user.id;
+
+  // Répond uniquement si IA activée et mentionné ou réponse au bot
+  if ((isMentioned || isReplyToBot) && mode) {
+    const response = await askAI(msg, sender);
+    if (response) {
+      await sock.sendMessage(sender, { text: response });
+    }
+  }
+
+  // Commande !ai on/off
+  if (msg.startsWith('!ai')) {
+    const command = msg.split(' ')[1];
+    const reply = toggleAI(command, sender);
+    if (reply) {
+      await sock.sendMessage(sender, { text: reply });
+    }
+  }
+}
