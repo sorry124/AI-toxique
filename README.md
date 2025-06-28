@@ -7,7 +7,7 @@ Un bot WhatsApp connecté avec IA (Gemini ou OpenAI), personnalité **toxique de
 🍴 Forker ce projet
 
 Tu peux facilement forker ce projet sur GitHub en cliquant ici :
-https://github.com/ton-hamoudi223/AI-toxique/fork
+https://github.com/hamoudi223/AI-toxique/fork
 
 🛠️ Générer une SESSION_ID
 
