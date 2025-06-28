@@ -1,3 +1,8 @@
+console.log("🚀 Bot démarre...");
+
+setInterval(() => {
+  console.log("🟢 Bot toujours vivant...");
+}, 10000);
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getMemory, saveMemory } from './db.js';
