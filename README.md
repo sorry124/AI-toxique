@@ -4,6 +4,18 @@ Un bot WhatsApp connecté avec IA (Gemini ou OpenAI), personnalité **toxique de
 
 ---
 
+🍴 Forker ce projet
+
+Tu peux facilement forker ce projet sur GitHub en cliquant ici :
+https://github.com/ton-username/thatbotz/fork
+
+🛠️ Générer une SESSION_ID
+
+👉 Va sur le site de pairing pour obtenir ton QR ou token :
+https://github.com/hamoudi223/Pairing-code-thatkid-
+
+🔐 Après scan ou connexion par numéro, tu reçois une SESSION_ID par message WhatsApp à coller dans .env.
+-----
 ## 🚀 Fonctionnalités
 
 - 🔗 Connexion via `SESSION_ID` (aucun QR Code requis)
