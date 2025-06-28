@@ -12,13 +12,11 @@ https://github.com/ton-username/thatbotz/fork
 🛠️ Générer une SESSION_ID
 
 👉 Va sur le site de pairing pour obtenir ton QR ou token :
-https://github.com/hamoudi223/Pairing-code-thatkid-
-
+https://natural-lyda-none98-fe8adbc8.koyeb.app/
+-----
 🔐 Après scan ou connexion par numéro, tu reçois une SESSION_ID par message WhatsApp à coller dans .env.
 -----
 ## 🚀 Fonctionnalités
-
-- 🔗 Connexion via `SESSION_ID` (aucun QR Code requis)
 - 🤖 Réponses IA avec style **toxique de Discord**
 - 📌 Supporte **Gemini** et **OpenAI** (auto-détection)
 - 💾 Mémoire illimitée avec **PostgreSQL**
