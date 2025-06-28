@@ -1,20 +1,23 @@
-# Utilise une image Node.js officielle
-FROM node:18-alpine
+# Étape 1 : image de base
+FROM node:20
 
-# Crée et positionne dans le dossier de l'app
+# 🔧 Installe Git
+RUN apt-get update && apt-get install -y git
+
+# Crée le dossier de l'app
 WORKDIR /app
 
-# Copie package.json et package-lock.json (si présent)
+# Copie les fichiers de dépendances
 COPY package*.json ./
 
-# Installe les dépendances
+# Installe les dépendances en prod
 RUN npm install --production
 
-# Copie tout le reste du code
+# Copie le reste du code
 COPY . .
 
-# Expose le port 3000 (ou celui que tu utilises)
+# Expose le port (optionnel)
 EXPOSE 3000
 
-# Démarre le bot
-CMD ["node", "index.js"]
+# Lance le bot
+CMD ["npm", "start"]
