@@ -8,10 +8,7 @@ const {
   makeWASocket,
   fetchLatestBaileysVersion,
   DisconnectReason,
-  initAuthCreds,
-  makeInMemoryStore,
-  useMultiFileAuthState,
-  initInMemoryKeyStore
+  initAuthCreds
 } = baileys;
 
 const SESSION_ID = process.env.SESSION_ID;
@@ -24,10 +21,9 @@ if (!SESSION_ID) {
 
 console.log('🚀 Démarrage du bot...');
 
-// 🔓 Décoder SESSION_ID en un objet d'authentification
+// 🔓 Décoder la SESSION_ID
 async function getAuthFromSessionId(sessionId) {
   const creds = initAuthCreds();
-  const keyStore = initInMemoryKeyStore();
 
   try {
     const payload = sessionId.split("~")[2];
@@ -35,10 +31,17 @@ async function getAuthFromSessionId(sessionId) {
     const session = JSON.parse(decoded);
 
     Object.assign(creds, session.creds);
-    Object.assign(keyStore, session.keys);
 
     return {
-      state: { creds, keys: keyStore },
+      state: {
+        creds,
+        keys: {
+          get: () => ({}),
+          set: () => {},
+          setKeys: () => {},
+          getKeys: () => []
+        }
+      },
       saveCreds: async () => {}
     };
   } catch (err) {
@@ -49,21 +52,19 @@ async function getAuthFromSessionId(sessionId) {
 
 async function startBot() {
   const { state, saveCreds } = await getAuthFromSessionId(SESSION_ID);
-  const { version, isLatest } = await fetchLatestBaileysVersion();
+  const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
     version,
     auth: state,
-    printQRInTerminal: false,
+    printQRInTerminal: false
   });
 
-  // 🟢 Message à toi quand connecté
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === 'open') {
       console.log('✅ Bot connecté à WhatsApp !');
 
-      // Envoi d'un message de confirmation
       await sock.sendMessage(OWNER_NUMBER + '@s.whatsapp.net', {
         text: `🤖 Le bot est maintenant connecté avec succès !`
       });
@@ -74,14 +75,13 @@ async function startBot() {
     }
   });
 
-  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+  sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
     if (!msg.message || msg.key.fromMe) return;
 
     const sender = msg.key.remoteJid;
     const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
 
-    // Exemple de réponse simple
     if (text.toLowerCase().includes('salut')) {
       await sock.sendMessage(sender, { text: "Yo 😎" });
     }
