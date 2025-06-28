@@ -1,4 +1,5 @@
-import { makeWASocket, useSingleFileAuthState } from '@whiskeysockets/baileys';
+import baileys from '@whiskeysockets/baileys';
+const { makeWASocket, useSingleFileAuthState } = baileys;
 import { Boom } from '@hapi/boom';
 import { handlerMessage } from './that.js';
 
