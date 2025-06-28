@@ -7,7 +7,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.4",
+    "@whiskeysockets/baileys": "lastest",
     "dotenv": "^16.0.3",
     "openai": "^4.6.0",
     "pg": "^8.10.0",
